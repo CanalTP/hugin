@@ -1,0 +1,18 @@
+[submodule "source/utils"]
+	path = source/utils
+	url = https://github.com/CanalTP/utils
+[submodule "source/third_party/osmpbfreader"]
+	path = source/third_party/osmpbfreader
+	url = https://github.com/CanalTP/libosmpbfreader
+[submodule "source/third_party/SimpleAmqpClient"]
+	path = source/third_party/SimpleAmqpClient
+	url = https://github.com/kinnou02/SimpleAmqpClient
+[submodule "source/third_party/librabbitmq-c"]
+	path = source/third_party/librabbitmq-c
+	url = https://github.com/alanxz/rabbitmq-c
+[submodule "source/navitia-proto"]
+	path = source/navitia-proto
+	url = https://github.com/CanalTP/navitia-proto
+[submodule "utils"]
+	path = utils
+	url = https://github.com/CanalTP/utils
