@@ -78,8 +78,9 @@ SET(BUILD_TOOLS OFF CACHE BOOL "don't build tool of librabbimq-c")
 SET(BUILD_TESTS OFF CACHE BOOL "don't build tests of librabbimq-c")
 SET(CMAKE_INSTALL_PREFIX "")
 SET(Rabbitmqc_INCLUDE_DIRS "${CMAKE_SOURCE_DIR}/third_party/librabbitmq-c/librabbitmq/")
+
 add_subdirectory(third_party/librabbitmq-c)
 add_subdirectory(third_party/SimpleAmqpClient)
+add_subdirectory(utils)
 
-
-add_executable(hugin main.cpp)
+add_subdirectory(hugin)
