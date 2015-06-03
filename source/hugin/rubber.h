@@ -30,41 +30,59 @@ www.navitia.io
 
 #pragma once
 #include <cpprest/http_client.h>
+#include <log4cplus/logger.h>
+#include <boost/optional.hpp>
 
 namespace navitia { namespace hugin {
 
+struct UpdateAction {
+    UpdateAction(const std::string& _id, const std::string _type, const std::string& _index, const web::json::value& val):
+        id(_id), type(_type), index(_index), value(val) {}
+
+    const std::string id;
+    const std::string type;
+    const std::string index;
+    web::json::value value;
+
+    std::string format() const;
+};
+
 struct Rubber {
+    log4cplus::Logger logger = log4cplus::Logger::getInstance("log");
     Rubber(const std::string& es_bdd): client(es_bdd) {}
     Rubber(const Rubber& r) = default;
 
     web::http::client::http_client client;
-    void bob() {
-//        std::cout << "query: " << std::endl;
-//        auto res = client.request(web::http::methods::GET, U("mimir"));
-//
-//        auto real_res = res.get();
-//        auto json = real_res.extract_json().get();
-//        std::cout << json << std::endl;
-//
-//        std::cout << json["mimir"] << std::endl;
-//        std::cout << json["mimir"]["settings"]["index"] << std::endl;
-//        std::cout << json["mimir"]["settings"]["index"]["number_of_replicas"].as_number().to_int64() << std::endl;
-    }
 
     void create_index(const std::string&);
+    std::string es_index;
+    boost::optional<std::string> es_type;
+
+    //simple wrapper around http_client to ease use
+    pplx::task<web::http::http_response> request(
+        const web::http::method& method,
+        const std::string& path_query,
+        const std::string& body_data);
+
+    //wrapper that throw an exception on error
+    pplx::task<web::http::http_response> checked_request(
+            const web::http::method& method,
+            const std::string& path_query,
+            const std::string& body_data);
 
 };
 
 struct BulkRubber {
+    log4cplus::Logger logger = log4cplus::Logger::getInstance("log");
     Rubber& rubber;
-    std::vector<web::json::value> values;
+    std::vector<UpdateAction> values;
     BulkRubber(Rubber& r): rubber(r) {}
     ~BulkRubber() {
         //flush the bulk insert
         finish();
     }
     void finish();
-    void add(const web::json::value&);
+    void add(const UpdateAction&);
 };
 
 }}

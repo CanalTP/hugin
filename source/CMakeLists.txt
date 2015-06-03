@@ -14,7 +14,6 @@ endif()
 #get git revision as the version number
 include(GetGitRevisionDescription)
 git_describe(GIT_REVISION)
-message("++++++++++++++++++++++++revision git: ${GIT_REVISION}")
 
 IF(NOT CMAKE_BUILD_TYPE)
    SET(CMAKE_BUILD_TYPE Debug)

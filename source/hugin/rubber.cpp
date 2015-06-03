@@ -32,27 +32,81 @@ www.navitia.io
 #include <cpprest/http_client.h>
 #include <cpprest/json.h>
 #include <iosfwd>
+#include <utils/exception.h>
 
 namespace http = web::http;
+namespace js = web::json;
 
 namespace navitia { namespace hugin {
 
-void Rubber::create_index(const std::string& index_name) {
-    client.request(http::methods::PUT, index_name);
+std::string UpdateAction::format() const {
+    std::stringstream res;
+    web::json::value action;
+    web::json::value nested_action;
+    nested_action["_id"] = js::value::string(id);
+    nested_action["_type"] = js::value::string(type);
+
+    action["index"] = js::value(nested_action);
+
+    res << action << "\n" << value;
+
+    return res.str();
 }
+
+void Rubber::create_index(const std::string& index_name) {
+    client.request(http::methods::PUT, index_name).wait();
+}
+
+pplx::task<web::http::http_response> Rubber::request(
+    const web::http::method& method,
+    const std::string& path_query,
+    const std::string& body_data) {
+    std::stringstream real_path;
+    real_path << es_index;
+    if (es_type) { real_path << "/" << *es_type; }
+    real_path << path_query;
+
+    LOG4CPLUS_WARN(logger, real_path.str());
+
+    return client.request(method, real_path.str(), body_data);
+}
+
+pplx::task<web::http::http_response> Rubber::checked_request(
+        const web::http::method& method,
+        const std::string& path_query,
+        const std::string& body_data) {
+
+    return request(method, path_query, body_data).then([&] (http::http_response response) {
+        if (response.status_code() != 200) {
+            LOG4CPLUS_WARN(logger, "bulk insert failed with error code: " << response.status_code()
+            << " reason: " << response.reason_phrase()
+            << " full: " << response.body());
+            throw navitia::exception("builk insert failed");
+        }
+        return response;
+    });
+}
+
 
 void BulkRubber::finish() {
+    if (values.empty()) { return; }
     std::stringstream json_values;
     for (const auto& json: values) {
-        json_values << json << "\n";
+        json_values << json.format() << "\n";
     }
+    LOG4CPLUS_DEBUG(logger, "query: " << json_values.str());
 
-    std::cout << "query: " << json_values << std::endl;
+    rubber.checked_request(http::methods::POST, "/_bulk", json_values.str()).get();
+//    rubber.checked_request(http::methods::POST, "/_bulk",
+//    "{\"index\":{\"_id\":\"admin:3808760\",\"_type\":\"admin\"}}\n"
+//    "{\"coord\":\"POINT(5.976612 49.645348)\",\"id\":3808760,\"insee\":\"\",\"level\":9,\"name\":\"Cap\",\"post_code\":\"\",\"uri\":\"admin:3808760\",\"weight\":0}\n"
+//    "\n"
+//    ).wait();
 
-    rubber.client.request(http::methods::POST, "_bulk", json_values.str());
+    //we clear the value for future finish
     values.clear();
 }
-void BulkRubber::add(const web::json::value& val) {
+void BulkRubber::add(const UpdateAction& val) {
     values.push_back(val);
 }
 

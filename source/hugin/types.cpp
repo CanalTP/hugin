@@ -39,14 +39,26 @@ namespace navitia { namespace hugin {
  *  Builds geometries of relations
  */
 void OSMCache::build_relations_geometries() {
-    for (auto& relation : relations) {
+    auto logger = log4cplus::Logger::getInstance("log");
+
+    size_t cpt_empty_relations(0);
+    for (auto& relation: relations) {
         relation.second.build_geometry(*this);
+
+        if (relation.second.polygon.empty()) {
+            cpt_empty_relations++;
+            continue;
+        }
         boost::geometry::model::box<point> box;
         boost::geometry::envelope(relation.second.polygon, box);
         Rect r(box.min_corner().get<0>(), box.min_corner().get<1>(),
                box.max_corner().get<0>(), box.max_corner().get<1>());
         admin_tree.Insert(r.min, r.max, &relation.second);
     }
+    if (cpt_empty_relations) {
+        LOG4CPLUS_DEBUG(logger, cpt_empty_relations << " have been ignored because of empty polygon");
+    }
+
 }
 
 void OSMCache::build_postal_codes(){
@@ -202,7 +214,7 @@ void OSMRelation::build_polygon(OSMCache& cache, std::set<u_int64_t> explored_id
 }
 
 void OSMRelation::build_geometry(OSMCache& cache) {
-    for (CanalTP::Reference ref : references) {
+    for (CanalTP::Reference ref: references) {
         if (ref.member_type == OSMPBF::Relation_MemberType::Relation_MemberType_NODE) {
             auto node_it = cache.nodes.find(ref.member_id);
             if (node_it == cache.nodes.end()) {

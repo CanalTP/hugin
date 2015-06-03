@@ -43,11 +43,11 @@ MimirPersistor::MimirPersistor(const OSMCache& cache, const std::string& conf):
         data(cache), rubber(conf) {
     // at the persistor creation, we create the index we'll work on
     rubber.create_index(es_index);
+    rubber.es_index = es_index;
 }
 
 void MimirPersistor::persist_admins() {
 
-    rubber.bob();
     size_t nb_empty_polygons = 0;
     BulkRubber bulk(rubber);
     for (auto relation: data.relations) {
@@ -56,11 +56,12 @@ void MimirPersistor::persist_admins() {
             continue;
         }
         std::stringstream polygon_stream;
-        polygon_stream <<  bg::wkt<mpolygon_type>(relation.second.polygon);
+        polygon_stream << bg::wkt<mpolygon_type>(relation.second.polygon);
         std::string polygon_str = polygon_stream.str();
         const auto coord = "POINT(" + std::to_string(relation.second.centre.get<0>())
                            + " " + std::to_string(relation.second.centre.get<1>()) + ")";
         js::value val;
+        const auto uri = "admin:" + std::to_string(relation.first);
         val["id"] = relation.first;
         val["name"] = js::value::string(relation.second.name);
         val["post_code"] = js::value::string(relation.second.postal_code());
@@ -69,9 +70,11 @@ void MimirPersistor::persist_admins() {
         val["coord"] = js::value::string(coord);
         val["shape"] = js::value::string(polygon_str);
         val["admin_shape"] = js::value::string(polygon_str);
-        val["uri"] =js::value::string( "admin:" + std::to_string(relation.first));
+        val["uri"] = js::value::string(uri);
         val["weight"] = 0; // TODO
-        bulk.add(val);
+
+        UpdateAction action(uri, "admin", es_index, val);
+        bulk.add(action);
     }
     bulk.finish();
     auto logger = log4cplus::Logger::getInstance("log");

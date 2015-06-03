@@ -31,6 +31,7 @@ www.navitia.io
 #pragma once
 #include <unordered_map>
 #include <set>
+#include <log4cplus/logger.h>
 #include <boost/geometry/core/cs.hpp>
 #include <boost/geometry/geometries/point.hpp>
 #include <boost/geometry/geometries/polygon.hpp>
@@ -173,4 +174,5 @@ struct OSMCache {
 
     void build_postal_codes();
 };
+
 }}
