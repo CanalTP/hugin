@@ -36,14 +36,15 @@ namespace navitia { namespace hugin {
 
 
 struct MimirPersistor {
-    MimirPersistor(const OSMCache& cache, const std::string& conf);
+    MimirPersistor(const OSMCache& cache, const std::string& conf, const std::string& index);
 
     const OSMCache& data;
-    const std::string es_index = "mimir"; // name of the updated elastic search index
+    const std::string es_index; // name of the updated elastic search index
 
     Rubber rubber;
 
     void persist_admins();
+    void create_index();
 
     /**
      * At the end we need to swap the indexes

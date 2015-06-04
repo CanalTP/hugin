@@ -39,8 +39,8 @@ namespace js = web::json;
 
 namespace navitia { namespace hugin {
 
-MimirPersistor::MimirPersistor(const OSMCache& cache, const std::string& conf):
-        data(cache), rubber(conf) {
+MimirPersistor::MimirPersistor(const OSMCache& cache, const std::string& conf, const std::string& index):
+        data(cache), es_index(index), rubber(conf) {
     rubber.es_index = es_index;
 }
 
@@ -77,6 +77,10 @@ void MimirPersistor::persist_admins() {
     bulk.finish();
     auto logger = log4cplus::Logger::getInstance("log");
     LOG4CPLUS_INFO(logger, "Ignored " << std::to_string(nb_empty_polygons) << " admins because their polygons were empty");
+}
+
+void MimirPersistor::create_index() {
+    rubber.create_index(es_index);
 }
 
 void MimirPersistor::finish() {

@@ -86,10 +86,10 @@ int main(int argc, char** argv) {
     cache.build_relations_geometries();
     cache.build_postal_codes();
 
-    navitia::hugin::MimirPersistor persistor(cache, es_conf);
+    navitia::hugin::MimirPersistor persistor(cache, es_conf, "mimir");
 
     // we first create the index we'll work on
-    persistor.rubber.create_index(persistor.es_index);
+    persistor.create_index();
 
     persistor.persist_admins();
 

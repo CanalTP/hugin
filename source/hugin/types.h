@@ -175,4 +175,5 @@ struct OSMCache {
     void build_postal_codes();
 };
 
+
 }}

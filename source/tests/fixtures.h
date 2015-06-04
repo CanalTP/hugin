@@ -143,3 +143,17 @@ struct es_global_fixture {
         LOG4CPLUS_INFO(logger, "client up!!!");
     }
 };
+
+
+//helper to display http response
+//only in tests, because slow
+inline std::ostream& operator<< (std::ostream& os, const web::http::http_response& r) {
+    // we wait to have the full response
+    r.content_ready().wait();
+    os << " -- " << r.to_string();
+    os << "[" << r.status_code() << "]";
+    if (r.status_code() != 200) {
+        os << ": " << r.reason_phrase();
+    }
+    return os;
+}

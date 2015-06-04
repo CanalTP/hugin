@@ -59,7 +59,7 @@ void Rubber::create_index(const std::string& index_name) {
             LOG4CPLUS_WARN(logger, "index creation failed with error code: " << r.status_code()
             << " reason: " << r.reason_phrase()
             << " full: " << r.body());
-            throw navitia::exception("index creationfailed");
+            throw navitia::exception("index creation failed");
         }
     }).wait();
 }
