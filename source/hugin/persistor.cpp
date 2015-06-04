@@ -41,8 +41,6 @@ namespace navitia { namespace hugin {
 
 MimirPersistor::MimirPersistor(const OSMCache& cache, const std::string& conf):
         data(cache), rubber(conf) {
-    // at the persistor creation, we create the index we'll work on
-    rubber.create_index(es_index);
     rubber.es_index = es_index;
 }
 

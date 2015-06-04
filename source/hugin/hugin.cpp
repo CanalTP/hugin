@@ -88,6 +88,9 @@ int main(int argc, char** argv) {
 
     navitia::hugin::MimirPersistor persistor(cache, es_conf);
 
+    // we first create the index we'll work on
+    persistor.rubber.create_index(persistor.es_index);
+
     persistor.persist_admins();
 
 

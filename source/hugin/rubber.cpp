@@ -54,7 +54,14 @@ std::string UpdateAction::format() const {
 }
 
 void Rubber::create_index(const std::string& index_name) {
-    client.request(http::methods::PUT, index_name).wait();
+    client.request(http::methods::PUT, index_name).then([=](http::http_response r) {
+        if (r.status_code() != 200) {
+            LOG4CPLUS_WARN(logger, "index creation failed with error code: " << r.status_code()
+            << " reason: " << r.reason_phrase()
+            << " full: " << r.body());
+            throw navitia::exception("index creationfailed");
+        }
+    }).wait();
 }
 
 pplx::task<web::http::http_response> Rubber::request(
@@ -90,6 +97,7 @@ pplx::task<web::http::http_response> Rubber::checked_request(
 
 void BulkRubber::finish() {
     if (values.empty()) { return; }
+
     std::stringstream json_values;
     for (const auto& json: values) {
         json_values << json.format() << "\n";
@@ -97,11 +105,6 @@ void BulkRubber::finish() {
     LOG4CPLUS_DEBUG(logger, "query: " << json_values.str());
 
     rubber.checked_request(http::methods::POST, "/_bulk", json_values.str()).get();
-//    rubber.checked_request(http::methods::POST, "/_bulk",
-//    "{\"index\":{\"_id\":\"admin:3808760\",\"_type\":\"admin\"}}\n"
-//    "{\"coord\":\"POINT(5.976612 49.645348)\",\"id\":3808760,\"insee\":\"\",\"level\":9,\"name\":\"Cap\",\"post_code\":\"\",\"uri\":\"admin:3808760\",\"weight\":0}\n"
-//    "\n"
-//    ).wait();
 
     //we clear the value for future finish
     values.clear();

@@ -30,68 +30,85 @@ www.navitia.io
 #define BOOST_TEST_DYN_LINK
 #define BOOST_TEST_MODULE hugin_test
 #include <boost/test/unit_test.hpp>
-#include "utils/logger.h"
+#include "fixtures.h"
 
-#include <stdlib.h>
-#include <boost/uuid/uuid_io.hpp>
-#include <boost/uuid/uuid_generators.hpp>
-#include <boost/algorithm/string.hpp>
+#include "hugin/types.h"
+#include "hugin/persistor.h"
 
-#include <thread>
-#include <utils/exception.h>
+BOOST_GLOBAL_FIXTURE(es_global_fixture)
 
-struct logger_initialized {
-    logger_initialized() { init_logger(); }
-};
-BOOST_GLOBAL_FIXTURE(logger_initialized)
+using web::http::client::http_client;
+using web::http::http_response;
+using web::http::methods;
+namespace js = web::json;
+namespace ba = boost::algorithm;
 
-/**
- * The docker container will be poped once every test suite
- *
- * If you need a clean docker (beware it will cost some time to start elastic search),
- * just create a new test suite:
- * BOOST_FIXTURE_TEST_SUITE(my_new_test_suite, elastic_search_docker)
- */
-struct elastic_search_docker {
-    elastic_search_docker() {
-        auto uuid = boost::uuids::random_generator()();
+//used as http query handler helper in the tests
+struct es_integration_tests_fixture {
+    std::string elastic_search_url = "http://localhost:9201/";
 
-        std::stringstream id;
-        id << "hugin_elastic_tests-" << uuid;
-        docker_id = id.str();
-        std::stringstream cmd;
-        // TODO don't forward port, but get the docker ip (but I think we should use the docker http client for those)
-        //the port forwarding makes simultaneous tests impossible
-        cmd << "docker run -d --name " << docker_id << " -p 9201:9200 elasticsearch";
-
-        const auto cmd_str = cmd.str();
-        const auto cmd_res = system(cmd_str.c_str());
-        if (cmd_res) {
-            LOG4CPLUS_ERROR(log4cplus::Logger::getInstance("log"),
-                            "cannot run docker command: " << cmd.str() << " return code: " << cmd_res);
-            throw navitia::exception("cannot run docker command");
-        }
-        container_started = true;
-    }
-    ~elastic_search_docker() {
-        if (! container_started) { return; }
-        //stop the docker on cleanup
-        const auto cmd = "docker stop " + docker_id + " && docker rm " + docker_id;
-        const auto res = system(cmd.c_str());
-        if (res) {
-            LOG4CPLUS_ERROR(log4cplus::Logger::getInstance("log"), "cannot stop docker: " << res);
-        }
-    }
-    bool container_started = false;
-    std::string docker_id;
+    http_client client;
+    es_integration_tests_fixture() : client(elastic_search_url) {}
 };
 
-BOOST_FIXTURE_TEST_SUITE(simple_elastic_import, elastic_search_docker)
+BOOST_FIXTURE_TEST_SUITE(simple_elastic_import, es_integration_tests_fixture)
+
+BOOST_AUTO_TEST_CASE(create_index)
+{
+    navitia::hugin::OSMCache cache;
+    navitia::hugin::MimirPersistor persistor(cache, elastic_search_url);
+
+    persistor.rubber.create_index("toto");
+
+    client.request(methods::GET, "/toto").then([] (http_response r) {
+        BOOST_REQUIRE_EQUAL(r.status_code(), 200);
+    }).wait();
+}
 
 BOOST_AUTO_TEST_CASE(add_one_admin)
 {
-    std::cout << "hey joe ?!" << std::endl;
-    BOOST_CHECK(true);
+    navitia::hugin::OSMCache cache;
+    navitia::hugin::MimirPersistor persistor(cache, elastic_search_url);
+
+    navitia::hugin::OSMRelation admin({}, "bob", "postal12", "bob's bob", 42);
+    admin.centre = point(1.0, 2.0);
+    admin.postal_codes.insert("postal42");
+    cache.relations.insert({1242, admin});
+
+    //we create a new index for that
+    persistor.rubber.create_index("tata");
+
+    client.request(methods::GET, "/toto/_count").then([] (http_response r) {
+        BOOST_REQUIRE_EQUAL(r.status_code(), 200);
+        auto json = r.extract_json().get();
+        BOOST_REQUIRE_EQUAL(json["count"], js::value::number(0));
+    }).wait();
+
+    persistor.persist_admins();
+
+    // we should then have one admin
+    client.request(methods::GET, "/toto/_count").then([] (http_response r) {
+        BOOST_REQUIRE_EQUAL(r.status_code(), 200);
+        auto json = r.extract_json().get();
+        BOOST_REQUIRE_EQUAL(json["count"], js::value::number(1));
+    }).wait();
+
+    //we look for all elt, we should only get the one we inserted
+    client.request(methods::GET, "/toto/_search?q=*.*").then([] (http_response r) {
+        BOOST_REQUIRE_EQUAL(r.status_code(), 200);
+        auto json = r.extract_json().get();
+        BOOST_REQUIRE_EQUAL(json["hits"]["hits"].size(), 1);
+        BOOST_REQUIRE_EQUAL(json["hits"]["hits"][0]["_id"].as_string(), "admin:1242"); //es id is a prefix + osmid
+        BOOST_REQUIRE_EQUAL(json["hits"]["hits"][0]["_index"].as_string(), "toto");
+        BOOST_REQUIRE_EQUAL(json["hits"]["hits"][0]["coord"].as_string(), "POINT(1.0 2.0)");
+        BOOST_REQUIRE_EQUAL(json["hits"]["hits"][0]["level"].as_integer(), 42);
+        BOOST_REQUIRE_EQUAL(json["hits"]["hits"][0]["name"].as_string(), "bob's bob");
+        BOOST_REQUIRE_EQUAL(json["hits"]["hits"][0]["postcode"].as_string(), "");
+        BOOST_REQUIRE(ba::starts_with(json["hits"]["hits"][0]["shape"].as_string(), "MULTIPOLYGON(("));
+        BOOST_REQUIRE_EQUAL(json["hits"]["hits"][0]["uri"].as_string(), "");
+        BOOST_REQUIRE_EQUAL(json["hits"]["hits"][0]["weight"].as_integer(), 0);
+    }).wait();
 }
 
 BOOST_AUTO_TEST_SUITE_END()
+
