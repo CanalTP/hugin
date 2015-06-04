@@ -58,7 +58,6 @@ void OSMCache::build_relations_geometries() {
     if (cpt_empty_relations) {
         LOG4CPLUS_DEBUG(logger, cpt_empty_relations << " have been ignored because of empty polygon");
     }
-
 }
 
 void OSMCache::build_postal_codes(){
@@ -112,9 +111,9 @@ OSMRelation::OSMRelation(const std::vector<CanalTP::Reference>& refs, const std:
 void OSMRelation::add_postal_code(const std::string& postal_code){
     if(postal_code.empty()){
         return;
-    }else if(postal_code.find(";", 0) == std::string::npos){
+    } else if(postal_code.find(";", 0) == std::string::npos) {
         this->postal_codes.insert(postal_code);
-    }else{
+    } else {
         boost::split(this->postal_codes, postal_code, boost::is_any_of(";"));
     }
 }

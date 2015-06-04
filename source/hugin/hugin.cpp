@@ -28,7 +28,6 @@ https://groups.google.com/d/forum/navitia
 www.navitia.io
 */
 
-#include "hugin.h"
 #include <queue>
 
 #include <iostream>
@@ -40,79 +39,11 @@ www.navitia.io
 #include "utils/init.h"
 
 #include "conf.h"
+#include "visitors.h"
 #include "persistor.h"
 
 namespace po = boost::program_options;
 namespace pt = boost::posix_time;
-
-namespace navitia { namespace hugin {
-
-/*
- * Read relations
- * Stores admins relations and initializes nodes and ways associated to it.
- * Stores relations for associatedStreet, also initializes nodes and ways.
- */
-void ReadRelationsVisitor::relation_callback(uint64_t osm_id, const CanalTP::Tags &tags, const CanalTP::References &refs) {
-    auto logger = log4cplus::Logger::getInstance("log");
-    const auto boundary = tags.find("boundary");
-    if (boundary == tags.end() || (boundary->second != "administrative" && boundary->second != "multipolygon")) {
-        return;
-    }
-    const auto tmp_admin_level = tags.find("admin_level");
-    if(tmp_admin_level != tags.end() && (tmp_admin_level->second == "8" || tmp_admin_level->second == "9")) {
-        for (const CanalTP::Reference& ref : refs) {
-            switch(ref.member_type) {
-            case OSMPBF::Relation_MemberType::Relation_MemberType_WAY:
-                if (ref.role == "outer" || ref.role == "" || ref.role == "exclave") {
-                    cache.ways.insert(std::make_pair(ref.member_id, OSMWay()));
-                }
-                break;
-            case OSMPBF::Relation_MemberType::Relation_MemberType_NODE:
-                if (ref.role == "admin_centre" || ref.role == "admin_center") {
-                    cache.nodes.insert(std::make_pair(ref.member_id, OSMNode()));
-                }
-                break;
-            case OSMPBF::Relation_MemberType::Relation_MemberType_RELATION:
-                continue;
-            }
-        }
-        const std::string insee = find_or_default("ref:INSEE", tags);
-        const std::string name = find_or_default("name", tags);
-        const std::string postal_code = find_or_default("addr:postcode", tags);
-        cache.relations.insert(std::make_pair(osm_id, OSMRelation(refs, insee, postal_code, name,
-                boost::lexical_cast<uint32_t>(tmp_admin_level->second))));
-    }
-}
-
-/*
- * We stores ways they are streets.
- * We store ids of needed nodes
- */
-void ReadWaysVisitor::way_callback(uint64_t osm_id, const CanalTP::Tags &, const std::vector<uint64_t>& nodes_refs) {
-    auto it_way = cache.ways.find(osm_id);
-    if (it_way == cache.ways.end()) {
-        return;
-    }
-    for (auto osm_id : nodes_refs) {
-        auto v = cache.nodes.insert(std::make_pair(osm_id, OSMNode()));
-        it_way->second.add_node(v.first);
-    }
-}
-
-/*
- * We fill needed nodes with their coordinates
- */
-void ReadNodesVisitor::node_callback(uint64_t osm_id, double lon, double lat,
-        const CanalTP::Tags& tags) {
-    auto node_it = cache.nodes.find(osm_id);
-    if (node_it != cache.nodes.end()) {
-        node_it->second.set_coord(lon, lat);
-        node_it->second.postal_code = find_or_default("addr:postcode", tags);
-    }
-}
-
-
-}}
 
 int main(int argc, char** argv) {
     navitia::init_app();

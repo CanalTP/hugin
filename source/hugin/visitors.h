@@ -41,7 +41,6 @@ typedef bg::model::multi_polygon<polygon_type> mpolygon_type;
 
 namespace navitia { namespace hugin {
 
-
 struct ReadRelationsVisitor {
     OSMCache& cache;
     ReadRelationsVisitor(OSMCache& cache) : cache(cache) {}
@@ -50,6 +49,7 @@ struct ReadRelationsVisitor {
     void relation_callback(uint64_t osm_id, const CanalTP::Tags & tags, const CanalTP::References & refs);
     void way_callback(uint64_t , const CanalTP::Tags& , const std::vector<uint64_t>&) {}
 };
+
 struct ReadWaysVisitor {
     // Read references and set if a node is used by a way
     log4cplus::Logger logger = log4cplus::Logger::getInstance("log");
@@ -61,7 +61,6 @@ struct ReadWaysVisitor {
     void relation_callback(uint64_t , const CanalTP::Tags& , const CanalTP::References& ) {}
     void way_callback(uint64_t osm_id, const CanalTP::Tags& tags, const std::vector<uint64_t>& nodes);
 };
-
 
 struct ReadNodesVisitor {
     // Read references and set if a node is used by a way

@@ -5,6 +5,7 @@ set(LOG4CPLUS_FIND_REQUIRED true)
 find_package(log4cplus)
 find_package(GoogleTcmalloc)
 find_package(Protoc)
+find_package(Casablanca)
 
 if(Boost_VERSION)
     # be silent if already found
