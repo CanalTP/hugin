@@ -83,5 +83,6 @@ SET(Rabbitmqc_INCLUDE_DIRS "${CMAKE_SOURCE_DIR}/third_party/librabbitmq-c/librab
 add_subdirectory(third_party/librabbitmq-c)
 add_subdirectory(third_party/SimpleAmqpClient)
 add_subdirectory(utils)
+add_subdirectory(tests)
 
 add_subdirectory(hugin)
