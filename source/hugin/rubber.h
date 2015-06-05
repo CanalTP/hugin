@@ -32,6 +32,7 @@ www.navitia.io
 #include <cpprest/http_client.h>
 #include <log4cplus/logger.h>
 #include <boost/optional.hpp>
+#include <boost/range/adaptor/indexed.hpp>
 
 namespace navitia { namespace hugin {
 
@@ -46,6 +47,18 @@ struct UpdateAction {
 
     std::string format() const;
 };
+
+template <typename Col>
+web::json::value to_json_array(const Col& collection) {
+    web::json::value res = web::json::value::array(collection.size());
+    using namespace boost::adaptors;
+    const auto indexed_col = collection | indexed(0);
+    for (auto it = boost::begin(indexed_col); it != boost::end(indexed_col); ++it) {
+        res[it.index()] = web::json::value(*it);
+    }
+    return res;
+}
+
 
 struct Rubber {
     log4cplus::Logger logger = log4cplus::Logger::getInstance("log");

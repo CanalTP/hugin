@@ -61,7 +61,7 @@ void OSMCache::build_relations_geometries() {
 }
 
 void OSMCache::build_postal_codes(){
-    for(auto relation: relations){
+    for (auto relation: relations) {
         if(relation.second.level != 9){
             continue;
         }
@@ -78,7 +78,7 @@ OSMRelation* OSMCache::match_coord_admin(const double lon, const double lat, uin
     typedef std::pair<uint32_t, std::vector<OSMRelation*>*> level_relations;
 
     std::vector<OSMRelation*> result;
-    auto callback = [](OSMRelation* rel, void* c)->bool{
+    auto callback = [](OSMRelation* rel, void* c) -> bool {
         level_relations* context;
         context = reinterpret_cast<level_relations*>(c);
         if(rel->level == context->first){
@@ -109,7 +109,7 @@ OSMRelation::OSMRelation(const std::vector<CanalTP::Reference>& refs, const std:
 }
 
 void OSMRelation::add_postal_code(const std::string& postal_code){
-    if(postal_code.empty()){
+    if (postal_code.empty()) {
         return;
     } else if(postal_code.find(";", 0) == std::string::npos) {
         this->postal_codes.insert(postal_code);
@@ -117,17 +117,6 @@ void OSMRelation::add_postal_code(const std::string& postal_code){
         boost::split(this->postal_codes, postal_code, boost::is_any_of(";"));
     }
 }
-
-std::string OSMRelation::postal_code() const{
-    if(postal_codes.empty()){
-        return "";
-    }else if(postal_codes.size() == 1){
-        return *postal_codes.begin();
-    }else{
-        return *postal_codes.begin() + "-" + *postal_codes.rbegin();
-    }
-}
-
 
 /*
  * We build the polygon of the admin

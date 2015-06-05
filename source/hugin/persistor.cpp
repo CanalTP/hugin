@@ -62,7 +62,8 @@ void MimirPersistor::persist_admins() {
         const auto uri = "admin:" + std::to_string(relation.first);
         val["id"] = relation.first;
         val["name"] = js::value::string(relation.second.name);
-        val["post_code"] = js::value::string(relation.second.postal_code());
+
+        val["post_codes"] = to_json_array(relation.second.postal_codes);
         val["insee"] = js::value::string(relation.second.insee);
         val["level"] = relation.second.level;
         val["coord"] = js::value::string(coord);

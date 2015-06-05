@@ -66,7 +66,7 @@ struct elastic_search_docker {
         docker_id = id.str();
         std::stringstream cmd;
         // TODO don't forward port, but get the docker ip (but I think we should use the docker http client for those)
-        //the port forwarding makes simultaneous tests impossible
+        // the port forwarding makes simultaneous tests impossible
         cmd << "docker run -d --name " << docker_id << " -p 9201:9200 elasticsearch";
 
         const auto cmd_str = cmd.str();

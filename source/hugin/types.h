@@ -122,9 +122,7 @@ struct OSMRelation {
                 const std::string &insee, const std::string postal_code,
                 const std::string &name, const uint32_t level);
 
-    std::string postal_code() const;
-
-    void add_postal_code(const std::string &postal_code);
+    void add_postal_code(const std::string& postal_code);
 
     void set_centre(float lon, float lat) {
         centre = point(lon, lat);
@@ -168,7 +166,7 @@ struct OSMCache {
 
     void build_relations_geometries();
 
-    OSMRelation *match_coord_admin(const double lon, const double lat, uint32_t level);
+    OSMRelation* match_coord_admin(const double lon, const double lat, uint32_t level);
 
     void match_nodes_admin();
 

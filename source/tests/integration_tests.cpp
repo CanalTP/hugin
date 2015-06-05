@@ -109,17 +109,24 @@ BOOST_AUTO_TEST_CASE(add_one_admin)
         BOOST_REQUIRE_EQUAL(r.status_code(), 200);
         auto json = r.extract_json().get();
         BOOST_REQUIRE_EQUAL(json["hits"]["hits"].size(), 1);
-        BOOST_CHECK_EQUAL(json["hits"]["hits"][0]["_id"].as_string(), "admin:1242"); //es id is a prefix + osmid
-        BOOST_CHECK_EQUAL(json["hits"]["hits"][0]["_index"].as_string(), "tata");
-        BOOST_CHECK_EQUAL(json["hits"]["hits"][0]["_source"]["coord"].as_string(), "POINT(1.000000 2.000000)");
-        BOOST_CHECK_EQUAL(json["hits"]["hits"][0]["_source"]["level"].as_integer(), 42);
-        BOOST_CHECK_EQUAL(json["hits"]["hits"][0]["_source"]["name"].as_string(), "bob's bob");
-        BOOST_CHECK_EQUAL(json["hits"]["hits"][0]["_source"]["post_code"].as_string(), "postal12-postal42");
-        BOOST_CHECK(ba::starts_with(json["hits"]["hits"][0]["_source"]["shape"].as_string(), "MULTIPOLYGON(("));
-        BOOST_CHECK(ba::starts_with(json["hits"]["hits"][0]["_source"]["admin_shape"].as_string(), "MULTIPOLYGON(("));
-        BOOST_CHECK_EQUAL(json["hits"]["hits"][0]["_source"]["uri"].as_string(), "admin:1242");
-        BOOST_CHECK_EQUAL(json["hits"]["hits"][0]["_source"]["weight"].as_integer(), 0);
+        auto& hit = json["hits"]["hits"][0];
+        BOOST_CHECK_EQUAL(hit["_id"].as_string(), "admin:1242"); //es id is a prefix + osmid
+        BOOST_CHECK_EQUAL(hit["_index"].as_string(), "tata");
+        BOOST_CHECK_EQUAL(hit["_source"]["coord"].as_string(), "POINT(1.000000 2.000000)");
+        BOOST_CHECK_EQUAL(hit["_source"]["level"].as_integer(), 42);
+        BOOST_CHECK_EQUAL(hit["_source"]["name"].as_string(), "bob's bob");
+
+        const auto post_codes = json["hits"]["hits"][0]["_source"]["post_codes"].as_array();
+        BOOST_CHECK_EQUAL(post_codes.at(0).as_string(), "postal12");
+        BOOST_CHECK_EQUAL(post_codes.at(1).as_string(), "postal42");
+
+        BOOST_CHECK(ba::starts_with(hit["_source"]["shape"].as_string(), "MULTIPOLYGON(("));
+        BOOST_CHECK(ba::starts_with(hit["_source"]["admin_shape"].as_string(), "MULTIPOLYGON(("));
+        BOOST_CHECK_EQUAL(hit["_source"]["uri"].as_string(), "admin:1242");
+        BOOST_CHECK_EQUAL(hit["_source"]["weight"].as_integer(), 0);
     }).wait();
+
+    //then we look only for the one we want, by it's name
 }
 
 BOOST_AUTO_TEST_SUITE_END()
