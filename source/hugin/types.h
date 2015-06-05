@@ -76,7 +76,7 @@ struct OSMNode {
     // We use int32_t to save memory, these are coordinates *  factor
     int32_t ilon = std::numeric_limits<int32_t>::max(),
             ilat = std::numeric_limits<int32_t>::max();
-    std::string postal_code;
+    std::string zip_code;
     static constexpr double factor = 1e6;
 
     bool is_defined() const {
@@ -113,16 +113,16 @@ struct OSMRelation {
             name = "";
     const uint32_t level = std::numeric_limits<uint32_t>::max();
 
-    std::set<std::string> postal_codes;
+    std::set<std::string> zip_codes;
 
     mpolygon_type polygon;
     point centre = point(0.0, 0.0);
 
     OSMRelation(const std::vector<CanalTP::Reference> &refs,
-                const std::string &insee, const std::string postal_code,
+                const std::string &insee, const std::string zip_code,
                 const std::string &name, const uint32_t level);
 
-    void add_postal_code(const std::string& postal_code);
+    void add_zip_code(const std::string& zip_code);
 
     void set_centre(float lon, float lat) {
         centre = point(lon, lat);
@@ -170,7 +170,7 @@ struct OSMCache {
 
     void match_nodes_admin();
 
-    void build_postal_codes();
+    void build_zip_codes();
 };
 
 

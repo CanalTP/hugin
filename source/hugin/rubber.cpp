@@ -31,8 +31,12 @@ www.navitia.io
 #include "rubber.h"
 #include <cpprest/http_client.h>
 #include <cpprest/json.h>
+#include <cpprest/filestream.h>
 #include <iosfwd>
 #include <utils/exception.h>
+#include "conf.h"
+#include "types.h"
+
 
 namespace http = web::http;
 namespace js = web::json;
@@ -53,15 +57,61 @@ std::string UpdateAction::format() const {
     return res.str();
 }
 
-void Rubber::create_index(const std::string& index_name) {
-    client.request(http::methods::PUT, index_name).then([=](http::http_response r) {
-        if (r.status_code() != 200) {
-            LOG4CPLUS_WARN(logger, "index creation failed with error code: " << r.status_code()
-            << " reason: " << r.reason_phrase()
-            << " full: " << r.body());
-            throw navitia::exception("index creation failed");
+web::json::value to_geojson(const mpolygon_type& multi_polygon) {
+    web::json::value res;
+
+    res["type"] = js::value::string("multipolygon");
+
+    auto multipoly_json = js::value::array();
+    size_t cpt_poly(0);
+    for (const auto& poly: multi_polygon) {
+        auto poly_json = js::value::array();
+        size_t  cpt(0);
+        for (const auto& coord: poly.outer()) {
+            //geojson points are an array with [lon, lat]
+            auto point = js::value::array(2);
+            point[0] = js::value(coord.get<0>());
+            point[1] = js::value(coord.get<1>());
+
+            poly_json[cpt++] = point;
+        }
+        multipoly_json[cpt_poly++] = poly_json;
+    }
+    res["coordinates"] = multipoly_json;
+    return res;
+}
+
+/**
+ * Create an elastic search index and configure it with the json setting file
+ *
+ * the configurations files are store in hugin/fixtures/json/
+ */
+void Rubber::create_index(const std::string& index_name, const std::string& json_settings) {
+    using concurrency::streams::file_stream;
+    using concurrency::streams::basic_istream;
+    const auto settings_path = std::string(navitia::config::fixtures_dir) + "/json/" + json_settings;
+
+    std::cout << "settings: " << settings_path << std::endl;
+
+    file_stream<unsigned char>::open_istream(settings_path).then([=](pplx::task<basic_istream<unsigned char>> previousTask) {
+        try {
+            auto fileStream = previousTask.get();
+
+            // Make HTTP request with the file stream as the body.
+            client.request(http::methods::PUT, index_name, fileStream).then([&](http::http_response r) {
+                if (r.status_code() != 200) {
+                    LOG4CPLUS_WARN(logger, "index creation failed with error code: " << r.status_code()
+                                           << " reason: " << r.reason_phrase()
+                                           << " | " << r.to_string()); //Note: the to_string is expensive, but since we stop on this throw for the moment...
+                    throw navitia::exception("index creation failed");
+                }
+            }).wait();
+        } catch (const std::system_error& e) {
+            LOG4CPLUS_WARN(logger, "problem with index settings file: " << e.what());
+            throw navitia::exception("index settings file error");
         }
     }).wait();
+
 }
 
 pplx::task<web::http::http_response> Rubber::request(
@@ -104,7 +154,7 @@ void BulkRubber::finish() {
     }
     LOG4CPLUS_DEBUG(logger, "query: " << json_values.str());
 
-    rubber.checked_request(http::methods::POST, "/_bulk", json_values.str()).get();
+    rubber.checked_request(http::methods::POST, "/_bulk", json_values.str()).wait();
 
     //we clear the value for future finish
     values.clear();

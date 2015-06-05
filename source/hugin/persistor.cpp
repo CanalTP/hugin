@@ -53,27 +53,26 @@ void MimirPersistor::persist_admins() {
             ++nb_empty_polygons;
             continue;
         }
-        std::stringstream polygon_stream;
-        polygon_stream << bg::wkt<mpolygon_type>(relation.second.polygon);
-        std::string polygon_str = polygon_stream.str();
-        const auto coord = "POINT(" + std::to_string(relation.second.centre.get<0>())
-                           + " " + std::to_string(relation.second.centre.get<1>()) + ")";
+
         js::value val;
-        const auto uri = "admin:" + std::to_string(relation.first);
-        val["id"] = relation.first;
+        const auto uri = "admin:osm:" + std::to_string(relation.first);
         val["name"] = js::value::string(relation.second.name);
 
-        val["post_codes"] = to_json_array(relation.second.postal_codes);
+        val["id"] = js::value::string(uri);
+        val["zip_codes"] = to_json_array(relation.second.zip_codes);
         val["insee"] = js::value::string(relation.second.insee);
         val["level"] = relation.second.level;
-        val["coord"] = js::value::string(coord);
-        val["shape"] = js::value::string(polygon_str);
-        val["admin_shape"] = js::value::string(polygon_str);
-        val["uri"] = js::value::string(uri);
+
+        val["coord"]["lat"] = js::value::number(relation.second.centre.get<0>());
+        val["coord"]["lon"] = js::value::number(relation.second.centre.get<1>());
+
+        val["shape"] = to_geojson(relation.second.polygon);
+        val["admin_shape"] = to_geojson(relation.second.polygon);
         val["weight"] = 0; // TODO
 
         UpdateAction action(uri, "admin", es_index, val);
         bulk.add(action);
+//        break; //TODO!
     }
     bulk.finish();
     auto logger = log4cplus::Logger::getInstance("log");
@@ -81,6 +80,8 @@ void MimirPersistor::persist_admins() {
 }
 
 void MimirPersistor::create_index() {
+    //TODO we need to be able to know if the settings have changed, because if so, we need to delete and create again the index
+
     rubber.create_index(es_index);
 }
 

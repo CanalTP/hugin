@@ -103,7 +103,7 @@ void ReadNodesVisitor::node_callback(uint64_t osm_id, double lon, double lat,
     auto node_it = cache.nodes.find(osm_id);
     if (node_it != cache.nodes.end()) {
         node_it->second.set_coord(lon, lat);
-        node_it->second.postal_code = find_or_default("addr:postcode", tags);
+        node_it->second.zip_code = find_or_default("addr:postcode", tags);
     }
 }
 

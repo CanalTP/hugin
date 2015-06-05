@@ -73,7 +73,7 @@ BOOST_AUTO_TEST_CASE(add_one_admin)
 
     navitia::hugin::OSMRelation admin({}, "bob", "postal12", "bob's bob", 42);
     admin.centre = point(1.0, 2.0);
-    admin.postal_codes.insert("postal42");
+    admin.zip_codes.insert("postal42");
     polygon_type poly;
     poly.outer().push_back({2.0, 1.3});
     poly.outer().push_back({4.1, 3.0});
@@ -104,29 +104,62 @@ BOOST_AUTO_TEST_CASE(add_one_admin)
         BOOST_REQUIRE_EQUAL(json["count"], js::value::number(1));
     }).wait();
 
+    const auto check_elt = [](js::value& hit) {
+        BOOST_CHECK_EQUAL(hit["_index"].as_string(), "tata");
+
+        BOOST_CHECK_EQUAL(hit["_id"].as_string(), "admin:osm:1242"); //es id is a prefix + osmid
+        BOOST_CHECK_EQUAL(hit["_source"]["id"].as_string(), "admin:osm:1242");
+
+        BOOST_CHECK_EQUAL(hit["_source"]["level"].as_integer(), 42);
+        BOOST_CHECK_EQUAL(hit["_source"]["name"].as_string(), "bob's bob");
+
+        const auto zip_codes = hit["_source"]["zip_codes"].as_array();
+        BOOST_CHECK_EQUAL(zip_codes.at(0).as_string(), "postal12");
+        BOOST_CHECK_EQUAL(zip_codes.at(1).as_string(), "postal42");
+        BOOST_CHECK_EQUAL(hit["_source"]["weight"].as_integer(), 0);
+
+        //point are given in lon/lat
+        BOOST_CHECK_EQUAL(hit["_source"]["coord"]["lat"].as_double(), 1.0);
+        BOOST_CHECK_EQUAL(hit["_source"]["coord"]["lon"].as_double(), 2.0);
+
+        //shapes are given in geojson
+        BOOST_CHECK(ba::starts_with(hit["_source"]["shape"].as_string(), "MULTIPOLYGON(("));
+        BOOST_CHECK(ba::starts_with(hit["_source"]["admin_shape"].as_string(), "MULTIPOLYGON(("));
+    };
+
     //we look for all elt, we should only get the one we inserted
-    client.request(methods::GET, "/tata/_search?q=*.*").then([] (http_response r) {
+    client.request(methods::GET, "/tata/_search?q=*.*").then([&check_elt] (http_response r) {
         BOOST_REQUIRE_EQUAL(r.status_code(), 200);
         auto json = r.extract_json().get();
         BOOST_REQUIRE_EQUAL(json["hits"]["hits"].size(), 1);
         auto& hit = json["hits"]["hits"][0];
-        BOOST_CHECK_EQUAL(hit["_id"].as_string(), "admin:1242"); //es id is a prefix + osmid
-        BOOST_CHECK_EQUAL(hit["_index"].as_string(), "tata");
-        BOOST_CHECK_EQUAL(hit["_source"]["coord"].as_string(), "POINT(1.000000 2.000000)");
-        BOOST_CHECK_EQUAL(hit["_source"]["level"].as_integer(), 42);
-        BOOST_CHECK_EQUAL(hit["_source"]["name"].as_string(), "bob's bob");
-
-        const auto post_codes = json["hits"]["hits"][0]["_source"]["post_codes"].as_array();
-        BOOST_CHECK_EQUAL(post_codes.at(0).as_string(), "postal12");
-        BOOST_CHECK_EQUAL(post_codes.at(1).as_string(), "postal42");
-
-        BOOST_CHECK(ba::starts_with(hit["_source"]["shape"].as_string(), "MULTIPOLYGON(("));
-        BOOST_CHECK(ba::starts_with(hit["_source"]["admin_shape"].as_string(), "MULTIPOLYGON(("));
-        BOOST_CHECK_EQUAL(hit["_source"]["uri"].as_string(), "admin:1242");
-        BOOST_CHECK_EQUAL(hit["_source"]["weight"].as_integer(), 0);
+        check_elt(hit);
     }).wait();
 
-    //then we look only for the one we want, by it's name
+    //then we look only for the one we want, by it's a portion of it's name
+    client.request(methods::GET, "/tata/_search?q=1242").then([&check_elt] (http_response r) {
+        BOOST_REQUIRE_EQUAL(r.status_code(), 200);
+        auto json = r.extract_json().get();
+        BOOST_REQUIRE_EQUAL(json["hits"]["hits"].size(), 1);
+        auto& hit = json["hits"]["hits"][0];
+        check_elt(hit);
+    }).wait();
+
+    //just to be sure, we try with another portion of the name
+    client.request(methods::GET, "/tata/_search?q=admin:osm").then([&check_elt] (http_response r) {
+        BOOST_REQUIRE_EQUAL(r.status_code(), 200);
+        auto json = r.extract_json().get();
+        BOOST_REQUIRE_EQUAL(json["hits"]["hits"].size(), 1);
+        auto& hit = json["hits"]["hits"][0];
+        check_elt(hit);
+    }).wait();
+
+    //and we try with a non existing name, we should be find anythin
+    client.request(methods::GET, "/tata/_search?q=bryan").then([&check_elt] (http_response r) {
+        BOOST_REQUIRE_EQUAL(r.status_code(), 200);
+        auto json = r.extract_json().get();
+        BOOST_CHECK_EQUAL(json["hits"]["hits"].size(), 0);
+    }).wait();
 }
 
 BOOST_AUTO_TEST_SUITE_END()

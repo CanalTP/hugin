@@ -60,14 +60,14 @@ void OSMCache::build_relations_geometries() {
     }
 }
 
-void OSMCache::build_postal_codes(){
+void OSMCache::build_zip_codes(){
     for (auto relation: relations) {
         if(relation.second.level != 9){
             continue;
         }
         auto rel = this->match_coord_admin(relation.second.centre.get<0>(), relation.second.centre.get<1>(), 8);
         if(rel){
-            rel->postal_codes.insert(relation.second.postal_codes.begin(), relation.second.postal_codes.end());
+            rel->zip_codes.insert(relation.second.zip_codes.begin(), relation.second.zip_codes.end());
         }
     }
 }
@@ -103,18 +103,18 @@ std::string OSMNode::to_geographic_point() const{
 }
 
 OSMRelation::OSMRelation(const std::vector<CanalTP::Reference>& refs, const std::string& insee,
-                         const std::string postal_code, const std::string& name, const uint32_t level) :
+                         const std::string zip_code, const std::string& name, const uint32_t level) :
         references(refs), insee(insee), name(name), level(level) {
-    this->add_postal_code(postal_code);
+    this->add_zip_code(zip_code);
 }
 
-void OSMRelation::add_postal_code(const std::string& postal_code){
-    if (postal_code.empty()) {
+void OSMRelation::add_zip_code(const std::string& zip_code){
+    if (zip_code.empty()) {
         return;
-    } else if(postal_code.find(";", 0) == std::string::npos) {
-        this->postal_codes.insert(postal_code);
+    } else if(zip_code.find(";", 0) == std::string::npos) {
+        this->zip_codes.insert(zip_code);
     } else {
-        boost::split(this->postal_codes, postal_code, boost::is_any_of(";"));
+        boost::split(this->zip_codes, zip_code, boost::is_any_of(";"));
     }
 }
 
@@ -146,12 +146,15 @@ void OSMRelation::build_polygon(OSMCache& cache, std::set<u_int64_t> explored_id
         auto next_node = it_first_way->second.nodes.back()->first;
         explored_ids.insert(ref->member_id);
         polygon_type tmp_polygon;
+        size_t debug_cpt(0); //DEBUG! to limit the number of points in geometry
         for (auto node : it_first_way->second.nodes) {
             if (!node->second.is_defined()) {
                 continue;
             }
             const auto p = point(float(node->second.lon()), float(node->second.lat()));
             tmp_polygon.outer().push_back(p);
+
+            if (debug_cpt > 5) { break; }//DEBUG!!
         }
 
         // We try to find a closed ring
@@ -182,6 +185,7 @@ void OSMRelation::build_polygon(OSMCache& cache, std::set<u_int64_t> explored_id
                 }
                 const auto p = point(float(node->second.lon()), float(node->second.lat()));
                 tmp_polygon.outer().push_back(p);
+                if (debug_cpt > 5) { break; }//DEBUG!!
             }
             next_node = next_way.nodes.back()->first;
         }
@@ -213,7 +217,7 @@ void OSMRelation::build_geometry(OSMCache& cache) {
             }
             if (in(ref.role, {"admin_centre", "admin_center"})) {
                 set_centre(float(node_it->second.lon()), float(node_it->second.lat()));
-                this->add_postal_code(node_it->second.postal_code);
+                this->add_zip_code(node_it->second.zip_code);
                 break;
             }
         }

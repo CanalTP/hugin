@@ -84,7 +84,6 @@ int main(int argc, char** argv) {
     navitia::hugin::ReadNodesVisitor node_visitor(cache);
     CanalTP::read_osm_pbf(input, node_visitor);
     cache.build_relations_geometries();
-    cache.build_postal_codes();
 
     navitia::hugin::MimirPersistor persistor(cache, es_conf, "mimir");
 

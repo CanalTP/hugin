@@ -33,6 +33,7 @@ www.navitia.io
 #include <log4cplus/logger.h>
 #include <boost/optional.hpp>
 #include <boost/range/adaptor/indexed.hpp>
+#include "types.h"
 
 namespace navitia { namespace hugin {
 
@@ -59,6 +60,11 @@ web::json::value to_json_array(const Col& collection) {
     return res;
 }
 
+/**
+ * build a geojson from a boost multipolygon
+ */
+web::json::value to_geojson(const mpolygon_type& multi_polygon);
+
 
 struct Rubber {
     log4cplus::Logger logger = log4cplus::Logger::getInstance("log");
@@ -67,7 +73,7 @@ struct Rubber {
 
     web::http::client::http_client client;
 
-    void create_index(const std::string&);
+    void create_index(const std::string&, const std::string& json_settings = "index_settings.json");
     std::string es_index;
     boost::optional<std::string> es_type;
 

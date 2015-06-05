@@ -65,9 +65,13 @@ INCLUDE (CheckIncludeFileCXX)
 set(CMAKE_REQUIRED_INCLUDES "/usr/include")
 CHECK_INCLUDE_FILE_CXX("log4cplus/loggingmacros.h" HAVE_LOGGINGMACROS_H)
 
+#Fixture directory for elastic search conf
+SET(FIXTURES_DIR "${CMAKE_SOURCE_DIR}/../fixtures/")
+
 configure_file("${CMAKE_SOURCE_DIR}/conf.h.cmake" "${CMAKE_BINARY_DIR}/conf.h")
 configure_file("${CMAKE_SOURCE_DIR}/config.cpp.cmake" "${CMAKE_BINARY_DIR}/config.cpp")
 add_library(config "${CMAKE_BINARY_DIR}/config.cpp")
+
 
 #THIRD PARTY
 #build simpleamqpclient as static lib
