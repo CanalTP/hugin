@@ -62,6 +62,7 @@ web::json::value to_geojson(const mpolygon_type& multi_polygon) {
 
     res["type"] = js::value::string("multipolygon");
 
+    auto coordinates = js::value::array();
     auto multipoly_json = js::value::array();
     size_t cpt_poly(0);
     for (const auto& poly: multi_polygon) {
@@ -77,7 +78,8 @@ web::json::value to_geojson(const mpolygon_type& multi_polygon) {
         }
         multipoly_json[cpt_poly++] = poly_json;
     }
-    res["coordinates"] = multipoly_json;
+    coordinates[0] = multipoly_json;
+    res["coordinates"] = coordinates;
     return res;
 }
 
@@ -87,11 +89,17 @@ web::json::value to_geojson(const mpolygon_type& multi_polygon) {
  * the configurations files are store in hugin/fixtures/json/
  */
 void Rubber::create_index(const std::string& index_name, const std::string& json_settings) {
+
+    // TODO for the moment we create the index only if it is not here,
+    // but we'll need a better way to handle configuration changes
+    if (client.request(http::methods::GET, index_name).get().status_code() == 200) {
+        LOG4CPLUS_INFO(logger, "index already there, not creating it");
+        return;
+    }
+
     using concurrency::streams::file_stream;
     using concurrency::streams::basic_istream;
     const auto settings_path = std::string(navitia::config::fixtures_dir) + "/json/" + json_settings;
-
-    std::cout << "settings: " << settings_path << std::endl;
 
     file_stream<unsigned char>::open_istream(settings_path).then([=](pplx::task<basic_istream<unsigned char>> previousTask) {
         try {
@@ -111,7 +119,6 @@ void Rubber::create_index(const std::string& index_name, const std::string& json
             throw navitia::exception("index settings file error");
         }
     }).wait();
-
 }
 
 pplx::task<web::http::http_response> Rubber::request(
@@ -122,8 +129,6 @@ pplx::task<web::http::http_response> Rubber::request(
     real_path << es_index;
     if (es_type) { real_path << "/" << *es_type; }
     real_path << path_query;
-
-    LOG4CPLUS_WARN(logger, real_path.str());
 
     return client.request(method, real_path.str(), body_data);
 }
@@ -137,9 +142,12 @@ pplx::task<web::http::http_response> Rubber::checked_request(
         if (response.status_code() != 200) {
             LOG4CPLUS_WARN(logger, "bulk insert failed with error code: " << response.status_code()
             << " reason: " << response.reason_phrase()
-            << " full: " << response.body());
+            << " full: " << response.to_string());
             throw navitia::exception("builk insert failed");
         }
+
+        //DEBUG
+//        LOG4CPLUS_WARN(logger, "bulk insert: " << response.to_string());
         return response;
     });
 }
@@ -152,13 +160,33 @@ void BulkRubber::finish() {
     for (const auto& json: values) {
         json_values << json.format() << "\n";
     }
-    LOG4CPLUS_DEBUG(logger, "query: " << json_values.str());
+//    LOG4CPLUS_DEBUG(logger, "query: " << json_values.str());
+    size_t cpt_errors(0);
 
-    rubber.checked_request(http::methods::POST, "/_bulk", json_values.str()).wait();
+    rubber.checked_request(http::methods::POST, "/_bulk", json_values.str())
+        .then([this, &cpt_errors](http::http_response response) {
+        //even if the http response code is 200, we need to check the elastic search response to look for errors
+        const auto json_response = response.extract_json().get();
 
-    //we clear the value for future finish
+        if (! json_response.has_field("errors") || ! json_response.at("errors").as_bool()) {
+            return;
+        }
+
+        for (const auto& item: json_response.at("items").as_array()) {
+            if (item.at("index").at("status") == 200) { continue; }
+
+            LOG4CPLUS_WARN(logger, "error while inserting " << item.at("index").at("_id") << " in elastic search: " << item);
+            cpt_errors++;
+        }
+    }).wait();
+
+    if (cpt_errors) {
+        LOG4CPLUS_ERROR(logger, cpt_errors << " errors during the bulk insert");
+    }
+    // we clear the value for future finish
     values.clear();
 }
+
 void BulkRubber::add(const UpdateAction& val) {
     values.push_back(val);
 }

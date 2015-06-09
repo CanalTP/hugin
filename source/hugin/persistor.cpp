@@ -47,8 +47,9 @@ MimirPersistor::MimirPersistor(const OSMCache& cache, const std::string& conf, c
 void MimirPersistor::persist_admins() {
 
     size_t nb_empty_polygons = 0;
+    size_t nb_added_admin = 0;
     BulkRubber bulk(rubber);
-    for (auto relation: data.relations) {
+    for (const auto& relation: data.relations) {
         if (relation.second.polygon.empty()) {
             ++nb_empty_polygons;
             continue;
@@ -66,17 +67,19 @@ void MimirPersistor::persist_admins() {
         val["coord"]["lat"] = js::value::number(relation.second.centre.get<0>());
         val["coord"]["lon"] = js::value::number(relation.second.centre.get<1>());
 
-        val["shape"] = to_geojson(relation.second.polygon);
-        val["admin_shape"] = to_geojson(relation.second.polygon);
+        const auto shape = to_geojson(relation.second.polygon);
+        val["shape"] = shape;
+        val["admin_shape"] = shape;
         val["weight"] = 0; // TODO
 
         UpdateAction action(uri, "admin", es_index, val);
         bulk.add(action);
-//        break; //TODO!
+        nb_added_admin++;
     }
     bulk.finish();
     auto logger = log4cplus::Logger::getInstance("log");
-    LOG4CPLUS_INFO(logger, "Ignored " << std::to_string(nb_empty_polygons) << " admins because their polygons were empty");
+    LOG4CPLUS_INFO(logger, nb_added_admin << " admin added, "
+    << nb_empty_polygons << " ignored admins because their polygons were empty");
 }
 
 void MimirPersistor::create_index() {

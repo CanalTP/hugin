@@ -123,12 +123,20 @@ BOOST_AUTO_TEST_CASE(add_one_admin)
         BOOST_CHECK_EQUAL(hit["_source"]["coord"]["lon"].as_double(), 2.0);
 
         //shapes are given in geojson
-        BOOST_CHECK(ba::starts_with(hit["_source"]["shape"].as_string(), "MULTIPOLYGON(("));
-        BOOST_CHECK(ba::starts_with(hit["_source"]["admin_shape"].as_string(), "MULTIPOLYGON(("));
+        const auto shape = hit["_source"]["shape"];
+        BOOST_CHECK_EQUAL(shape.at("type").as_string(), "multipolygon");
+        BOOST_REQUIRE_EQUAL(shape.at("coordinates").size(), 1);
+        BOOST_REQUIRE_EQUAL(shape.at("coordinates").at(0).size(), 1);
+        BOOST_REQUIRE_EQUAL(shape.at("coordinates").at(0).at(0).size(), 4);
+        const auto poly = shape.at("coordinates").at(0).at(0);
+        BOOST_REQUIRE_EQUAL(poly.at(0).size(), 2); //the lon/lat
+        BOOST_CHECK_CLOSE(poly.at(0).at(0).as_double(), 2.0, 1e-5);
+        BOOST_CHECK_CLOSE(poly.at(0).at(1).as_double(), 1.3, 1e-5);
+        BOOST_CHECK_EQUAL(hit["_source"]["admin_shape"], shape); //the admin shape and the shape should be equals
     };
 
     //we look for all elt, we should only get the one we inserted
-    client.request(methods::GET, "/tata/_search?q=*.*").then([&check_elt] (http_response r) {
+    client.request(methods::GET, "/tata/_search?q=*").then([&check_elt] (http_response r) {
         BOOST_REQUIRE_EQUAL(r.status_code(), 200);
         auto json = r.extract_json().get();
         BOOST_REQUIRE_EQUAL(json["hits"]["hits"].size(), 1);
@@ -137,7 +145,9 @@ BOOST_AUTO_TEST_CASE(add_one_admin)
     }).wait();
 
     //then we look only for the one we want, by it's a portion of it's name
-    client.request(methods::GET, "/tata/_search?q=1242").then([&check_elt] (http_response r) {
+    web::http::uri_builder builder ("/tata/_search");
+    builder.append_query("q", "bob's bob", true);
+    client.request(methods::GET, builder.to_string()).then([&check_elt] (http_response r) {
         BOOST_REQUIRE_EQUAL(r.status_code(), 200);
         auto json = r.extract_json().get();
         BOOST_REQUIRE_EQUAL(json["hits"]["hits"].size(), 1);
@@ -146,7 +156,7 @@ BOOST_AUTO_TEST_CASE(add_one_admin)
     }).wait();
 
     //just to be sure, we try with another portion of the name
-    client.request(methods::GET, "/tata/_search?q=admin:osm").then([&check_elt] (http_response r) {
+    client.request(methods::GET, "/tata/_search?q=bob").then([&check_elt] (http_response r) {
         BOOST_REQUIRE_EQUAL(r.status_code(), 200);
         auto json = r.extract_json().get();
         BOOST_REQUIRE_EQUAL(json["hits"]["hits"].size(), 1);
@@ -154,7 +164,7 @@ BOOST_AUTO_TEST_CASE(add_one_admin)
         check_elt(hit);
     }).wait();
 
-    //and we try with a non existing name, we should be find anythin
+    //and we try with a non existing name, we should be find anything
     client.request(methods::GET, "/tata/_search?q=bryan").then([&check_elt] (http_response r) {
         BOOST_REQUIRE_EQUAL(r.status_code(), 200);
         auto json = r.extract_json().get();

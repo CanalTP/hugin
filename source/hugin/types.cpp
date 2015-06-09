@@ -96,14 +96,14 @@ OSMRelation* OSMCache::match_coord_admin(const double lon, const double lat, uin
     return nullptr;
 }
 
-std::string OSMNode::to_geographic_point() const{
+std::string OSMNode::to_geographic_point() const {
     std::stringstream geog;
-    geog << std::setprecision(10)<<"POINT("<< coord_to_string() <<")";
+    geog << std::setprecision(10) << "POINT(" << coord_to_string() << ")";
     return geog.str();
 }
 
 OSMRelation::OSMRelation(const std::vector<CanalTP::Reference>& refs, const std::string& insee,
-                         const std::string zip_code, const std::string& name, const uint32_t level) :
+                         const std::string& zip_code, const std::string& name, const uint32_t level) :
         references(refs), insee(insee), name(name), level(level) {
     this->add_zip_code(zip_code);
 }
@@ -146,15 +146,13 @@ void OSMRelation::build_polygon(OSMCache& cache, std::set<u_int64_t> explored_id
         auto next_node = it_first_way->second.nodes.back()->first;
         explored_ids.insert(ref->member_id);
         polygon_type tmp_polygon;
-        size_t debug_cpt(0); //DEBUG! to limit the number of points in geometry
         for (auto node : it_first_way->second.nodes) {
             if (!node->second.is_defined()) {
                 continue;
             }
             const auto p = point(float(node->second.lon()), float(node->second.lat()));
-            tmp_polygon.outer().push_back(p);
 
-            if (debug_cpt > 5) { break; }//DEBUG!!
+            tmp_polygon.outer().push_back(p);
         }
 
         // We try to find a closed ring
@@ -185,7 +183,6 @@ void OSMRelation::build_polygon(OSMCache& cache, std::set<u_int64_t> explored_id
                 }
                 const auto p = point(float(node->second.lon()), float(node->second.lat()));
                 tmp_polygon.outer().push_back(p);
-                if (debug_cpt > 5) { break; }//DEBUG!!
             }
             next_node = next_way.nodes.back()->first;
         }
@@ -200,6 +197,12 @@ void OSMRelation::build_polygon(OSMCache& cache, std::set<u_int64_t> explored_id
         }
         polygon.push_back(tmp_polygon);
     }
+
+    // to reduce the size of the polygon and to avoid dupplicate points, we simplify it at 1m
+    mpolygon_type simplified;
+    boost::geometry::simplify(polygon, simplified, 0.00001);
+    polygon = simplified;
+
     if ((centre.get<0>() == 0.0 || centre.get<1>() == 0.0) && !polygon.empty()) {
         bg::centroid(polygon, centre);
     }

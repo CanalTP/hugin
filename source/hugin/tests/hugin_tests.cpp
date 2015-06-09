@@ -65,10 +65,12 @@ BOOST_AUTO_TEST_CASE(geojson_creator) {
     BOOST_CHECK_EQUAL(geojson.at("type"), value::string("multipolygon"));
     BOOST_REQUIRE(geojson.has_field("coordinates"));
 
-    const auto coordinates = geojson.at("coordinates");
-    BOOST_REQUIRE_EQUAL(coordinates.size(), 2);
+    const auto coordinates = geojson.at("coordinates"); //first coordinates is a one elt wrapper
+    BOOST_REQUIRE_EQUAL(coordinates.size(), 1);
+    const auto multi_poly = coordinates.at(0); //the real multipoly is here
+    BOOST_REQUIRE_EQUAL(multi_poly.size(), 2);
 
-    const auto square_geo = coordinates.at(0);
+    const auto square_geo = multi_poly.at(0);
     BOOST_REQUIRE_EQUAL(square_geo.size(), 4);
     BOOST_REQUIRE_EQUAL(square_geo.at(0).size(), 2);
     BOOST_REQUIRE_CLOSE(square_geo.at(0).at(0).as_double(), 0., epsilon);
@@ -83,7 +85,7 @@ BOOST_AUTO_TEST_CASE(geojson_creator) {
     BOOST_REQUIRE_CLOSE(square_geo.at(3).at(0).as_double(), 1., epsilon);
     BOOST_REQUIRE_CLOSE(square_geo.at(3).at(1).as_double(), 0., epsilon);
 
-    const auto triangle_geo = coordinates.at(1);
+    const auto triangle_geo = multi_poly.at(1);
     BOOST_REQUIRE_EQUAL(triangle_geo.size(), 3);
     BOOST_REQUIRE_EQUAL(triangle_geo.at(0).size(), 2);
     BOOST_REQUIRE_CLOSE(triangle_geo.at(0).at(0).as_double(), 2., epsilon);

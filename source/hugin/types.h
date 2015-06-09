@@ -118,9 +118,9 @@ struct OSMRelation {
     mpolygon_type polygon;
     point centre = point(0.0, 0.0);
 
-    OSMRelation(const std::vector<CanalTP::Reference> &refs,
-                const std::string &insee, const std::string zip_code,
-                const std::string &name, const uint32_t level);
+    OSMRelation(const std::vector<CanalTP::Reference>& refs,
+                const std::string& insee, const std::string& zip_code,
+                const std::string& name, const uint32_t level);
 
     void add_zip_code(const std::string& zip_code);
 
