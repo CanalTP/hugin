@@ -5,6 +5,7 @@ set(LOG4CPLUS_FIND_REQUIRED true)
 find_package(log4cplus)
 find_package(GoogleTcmalloc)
 find_package(Protoc)
+find_package(Casablanca)
 
 if(Boost_VERSION)
     # be silent if already found
@@ -64,9 +65,13 @@ INCLUDE (CheckIncludeFileCXX)
 set(CMAKE_REQUIRED_INCLUDES "/usr/include")
 CHECK_INCLUDE_FILE_CXX("log4cplus/loggingmacros.h" HAVE_LOGGINGMACROS_H)
 
+#Fixture directory for elastic search conf
+SET(FIXTURES_DIR "${CMAKE_SOURCE_DIR}/../fixtures/")
+
 configure_file("${CMAKE_SOURCE_DIR}/conf.h.cmake" "${CMAKE_BINARY_DIR}/conf.h")
 configure_file("${CMAKE_SOURCE_DIR}/config.cpp.cmake" "${CMAKE_BINARY_DIR}/config.cpp")
 add_library(config "${CMAKE_BINARY_DIR}/config.cpp")
+
 
 #THIRD PARTY
 #build simpleamqpclient as static lib
@@ -82,5 +87,6 @@ SET(Rabbitmqc_INCLUDE_DIRS "${CMAKE_SOURCE_DIR}/third_party/librabbitmq-c/librab
 add_subdirectory(third_party/librabbitmq-c)
 add_subdirectory(third_party/SimpleAmqpClient)
 add_subdirectory(utils)
+add_subdirectory(tests)
 
 add_subdirectory(hugin)

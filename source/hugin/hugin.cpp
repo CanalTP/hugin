@@ -1,4 +1,4 @@
-/* Copyright © 2001-2014, Canal TP and/or its affiliates. All rights reserved.
+/* Copyright © 2001-2015, Canal TP and/or its affiliates. All rights reserved.
 
 This file is part of Navitia,
     the software to build cool stuff with public transport.
@@ -28,319 +28,35 @@ https://groups.google.com/d/forum/navitia
 www.navitia.io
 */
 
-#include "hugin.h"
-
-#include <stdio.h>
 #include <queue>
 
 #include <iostream>
 #include <boost/program_options.hpp>
-#include <boost/geometry.hpp>
-#include <boost/lexical_cast.hpp>
 #include <boost/dynamic_bitset.hpp>
-#include <boost/range/algorithm/find_if.hpp>
-#include <boost/range/algorithm/reverse.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
 
 #include "utils/functions.h"
 #include "utils/init.h"
 
 #include "conf.h"
+#include "visitors.h"
+#include "persistor.h"
 
 namespace po = boost::program_options;
 namespace pt = boost::posix_time;
-
-namespace navitia { namespace hugin {
-
-/*
- * Read relations
- * Stores admins relations and initializes nodes and ways associated to it.
- * Stores relations for associatedStreet, also initializes nodes and ways.
- */
-void ReadRelationsVisitor::relation_callback(uint64_t osm_id, const CanalTP::Tags &tags, const CanalTP::References &refs) {
-    auto logger = log4cplus::Logger::getInstance("log");
-    const auto boundary = tags.find("boundary");
-    if (boundary == tags.end() || (boundary->second != "administrative" && boundary->second != "multipolygon")) {
-        return;
-    }
-    const auto tmp_admin_level = tags.find("admin_level");
-    if(tmp_admin_level != tags.end() && (tmp_admin_level->second == "8" || tmp_admin_level->second == "9")) {
-        for (const CanalTP::Reference& ref : refs) {
-            switch(ref.member_type) {
-            case OSMPBF::Relation_MemberType::Relation_MemberType_WAY:
-                if (ref.role == "outer" || ref.role == "" || ref.role == "exclave") {
-                    cache.ways.insert(std::make_pair(ref.member_id, OSMWay()));
-                }
-                break;
-            case OSMPBF::Relation_MemberType::Relation_MemberType_NODE:
-                if (ref.role == "admin_centre" || ref.role == "admin_center") {
-                    cache.nodes.insert(std::make_pair(ref.member_id, OSMNode()));
-                }
-                break;
-            case OSMPBF::Relation_MemberType::Relation_MemberType_RELATION:
-                continue;
-            }
-        }
-        const std::string insee = find_or_default("ref:INSEE", tags);
-        const std::string name = find_or_default("name", tags);
-        const std::string postal_code = find_or_default("addr:postcode", tags);
-        cache.relations.insert(std::make_pair(osm_id, OSMRelation(refs, insee, postal_code, name,
-                boost::lexical_cast<uint32_t>(tmp_admin_level->second))));
-    }
-}
-
-/*
- * We stores ways they are streets.
- * We store ids of needed nodes
- */
-void ReadWaysVisitor::way_callback(uint64_t osm_id, const CanalTP::Tags &, const std::vector<uint64_t>& nodes_refs) {
-    auto it_way = cache.ways.find(osm_id);
-    if (it_way == cache.ways.end()) {
-        return;
-    }
-    for (auto osm_id : nodes_refs) {
-        auto v = cache.nodes.insert(std::make_pair(osm_id, OSMNode()));
-        it_way->second.add_node(v.first);
-    }
-}
-
-/*
- * We fill needed nodes with their coordinates
- */
-void ReadNodesVisitor::node_callback(uint64_t osm_id, double lon, double lat,
-        const CanalTP::Tags& tags) {
-    auto node_it = cache.nodes.find(osm_id);
-    if (node_it != cache.nodes.end()) {
-        node_it->second.set_coord(lon, lat);
-        node_it->second.postal_code = find_or_default("addr:postcode", tags);
-    }
-}
-
-/*
- *  Builds geometries of relations
- */
-void OSMCache::build_relations_geometries() {
-    for (auto& relation : relations) {
-        relation.second.build_geometry(*this);
-        boost::geometry::model::box<point> box;
-        boost::geometry::envelope(relation.second.polygon, box);
-        Rect r(box.min_corner().get<0>(), box.min_corner().get<1>(),
-                box.max_corner().get<0>(), box.max_corner().get<1>());
-        admin_tree.Insert(r.min, r.max, &relation.second);
-    }
-}
-
-void OSMCache::build_postal_codes(){
-    for(auto relation: relations){
-        if(relation.second.level != 9){
-            continue;
-        }
-        auto rel = this->match_coord_admin(relation.second.centre.get<0>(), relation.second.centre.get<1>(), 8);
-        if(rel){
-            rel->postal_codes.insert(relation.second.postal_codes.begin(), relation.second.postal_codes.end());
-        }
-    }
-}
-
-OSMRelation* OSMCache::match_coord_admin(const double lon, const double lat, uint32_t level) {
-    Rect search_rect(lon, lat);
-    const auto p = point(lon, lat);
-    typedef std::pair<uint32_t, std::vector<OSMRelation*>*> level_relations;
-
-    std::vector<OSMRelation*> result;
-    auto callback = [](OSMRelation* rel, void* c)->bool{
-        level_relations* context;
-        context = reinterpret_cast<level_relations*>(c);
-        if(rel->level == context->first){
-            context->second->push_back(rel);
-        }
-        return true;
-    };
-    level_relations context = std::make_pair(level, &result);
-    admin_tree.Search(search_rect.min, search_rect.max, callback, &context);
-    for(auto rel : result) {
-        if (boost::geometry::within(p, rel->polygon)){
-            return rel;
-        }
-    }
-    return nullptr;
-}
-
-std::string OSMNode::to_geographic_point() const{
-    std::stringstream geog;
-    geog << std::setprecision(10)<<"POINT("<< coord_to_string() <<")";
-    return geog.str();
-}
-
-OSMRelation::OSMRelation(const std::vector<CanalTP::Reference>& refs, const std::string& insee,
-        const std::string postal_code, const std::string& name, const uint32_t level) :
-        references(refs), insee(insee), name(name), level(level) {
-    this->add_postal_code(postal_code);
-}
-
-void OSMRelation::add_postal_code(const std::string& postal_code){
-    if(postal_code.empty()){
-        return;
-    }else if(postal_code.find(";", 0) == std::string::npos){
-        this->postal_codes.insert(postal_code);
-    }else{
-        boost::split(this->postal_codes, postal_code, boost::is_any_of(";"));
-    }
-}
-
-std::string OSMRelation::postal_code() const{
-    if(postal_codes.empty()){
-        return "";
-    }else if(postal_codes.size() == 1){
-        return *postal_codes.begin();
-    }else{
-        return *postal_codes.begin() + "-" + *postal_codes.rbegin();
-    }
-}
-
-
-/*
- * We build the polygon of the admin
- * Ways are supposed to be order, but they're not always.
- * Also we may have to reverse way before adding them into the polygon
- */
-void OSMRelation::build_polygon(OSMCache& cache, std::set<u_int64_t> explored_ids) {
-    auto is_outer_way = [](const CanalTP::Reference& r) {
-        return r.member_type == OSMPBF::Relation_MemberType::Relation_MemberType_WAY
-            && in(r.role, {"outer", "enclave", ""});
-    };
-    auto pickable_way = [&](const CanalTP::Reference& r) {
-        return is_outer_way(r) && explored_ids.count(r.member_id) == 0;
-    };
-    // We need to explore every node because a boundary can be made in several parts
-    while(explored_ids.size() != this->references.size()) {
-        // We pickup one way
-        auto ref = boost::find_if(references, pickable_way);
-        if (ref == references.end()) {
-            break;
-        }
-        auto it_first_way = cache.ways.find(ref->member_id);
-        if (it_first_way == cache.ways.end() || it_first_way->second.nodes.empty()) {
-            break;
-        }
-        auto first_node = it_first_way->second.nodes.front()->first;
-        auto next_node = it_first_way->second.nodes.back()->first;
-        explored_ids.insert(ref->member_id);
-        polygon_type tmp_polygon;
-        for (auto node : it_first_way->second.nodes) {
-            if (!node->second.is_defined()) {
-                continue;
-            }
-            const auto p = point(float(node->second.lon()), float(node->second.lat()));
-            tmp_polygon.outer().push_back(p);
-        }
-
-        // We try to find a closed ring
-        while (first_node != next_node) {
-            // We look for a way that begin or end by the last node
-            ref = boost::find_if(references,
-                    [&](CanalTP::Reference& r) {
-                        if (!pickable_way(r)) {
-                            return false;
-                        }
-                        auto it = cache.ways.find(r.member_id);
-                        return it != cache.ways.end() &&
-                                !it->second.nodes.empty() &&
-                            (it->second.nodes.front()->first == next_node ||
-                             it->second.nodes.back()->first == next_node );
-                    });
-            if (ref == references.end()) {
-                break;
-            }
-            explored_ids.insert(ref->member_id);
-            auto next_way = cache.ways[ref->member_id];
-            if (next_way.nodes.front()->first != next_node) {
-                boost::reverse(next_way.nodes);
-            }
-            for (auto node : next_way.nodes) {
-                if (!node->second.is_defined()) {
-                    continue;
-                }
-                const auto p = point(float(node->second.lon()), float(node->second.lat()));
-                tmp_polygon.outer().push_back(p);
-            }
-            next_node = next_way.nodes.back()->first;
-        }
-        if (tmp_polygon.outer().size() < 2 || ref == references.end()) {
-            break;
-        }
-        const auto front = tmp_polygon.outer().front();
-        const auto back = tmp_polygon.outer().back();
-        // This should not happen, but does some time
-        if (front.get<0>() != back.get<0>() || front.get<1>() != back.get<1>()) {
-            tmp_polygon.outer().push_back(tmp_polygon.outer().front());
-        }
-        polygon.push_back(tmp_polygon);
-    }
-    if ((centre.get<0>() == 0.0 || centre.get<1>() == 0.0) && !polygon.empty()) {
-        bg::centroid(polygon, centre);
-    }
-}
-
-void OSMRelation::build_geometry(OSMCache& cache) {
-    for (CanalTP::Reference ref : references) {
-        if (ref.member_type == OSMPBF::Relation_MemberType::Relation_MemberType_NODE) {
-            auto node_it = cache.nodes.find(ref.member_id);
-            if (node_it == cache.nodes.end()) {
-                continue;
-            }
-            if (!node_it->second.is_defined()) {
-                continue;
-            }
-            if (in(ref.role, {"admin_centre", "admin_center"})) {
-                set_centre(float(node_it->second.lon()), float(node_it->second.lat()));
-                this->add_postal_code(node_it->second.postal_code);
-                break;
-            }
-        }
-    }
-    build_polygon(cache);
-}
-
-void MimirPersistor::persist() const {
-
-//    this->lotus.exec("TRUNCATE  administrative_regions CASCADE;");
-//    lotus.prepare_bulk_insert("administrative_regions", {"id", "name", "post_code", "insee",
-//                                                         "level", "coord", "boundary", "uri"});
-//    size_t nb_empty_polygons = 0 ;
-//    for (auto relation : relations) {
-//        if (relation.second.polygon.empty()) {
-//            ++nb_empty_polygons;
-//            continue;
-//        }
-//        std::stringstream polygon_stream;
-//        polygon_stream <<  bg::wkt<mpolygon_type>(relation.second.polygon);
-//        std::string polygon_str = polygon_stream.str();
-//        const auto coord = "POINT(" + std::to_string(relation.second.centre.get<0>())
-//                           + " " + std::to_string(relation.second.centre.get<1>()) + ")";
-//        lotus.insert({std::to_string(relation.first), relation.second.name,
-//                      relation.second.postal_code(), relation.second.insee,
-//                      std::to_string(relation.second.level), coord, polygon_str,
-//                      "admin:"+std::to_string(relation.first)});
-//    }
-//    lotus.finish_bulk_insert();
-//    auto logger = log4cplus::Logger::getInstance("log");
-//    LOG4CPLUS_INFO(logger, "Ignored " << std::to_string(nb_empty_polygons) << " admins because their polygons were empty");
-}
-}}
 
 int main(int argc, char** argv) {
     navitia::init_app();
     auto logger = log4cplus::Logger::getInstance("log");
     pt::ptime start;
-    std::string input, connection_string;
+    std::string input, es_conf;
     po::options_description desc("Allowed options");
     desc.add_options()
         ("version,v", "Show version")
         ("help,h", "Show this message")
         ("input,i", po::value<std::string>(&input)->required(), "Input OSM File")
-        ("connection-string", po::value<std::string>(&connection_string)->required(),
-         "Database connection parameters: host=localhost user=navitia dbname=navitia password=navitia");
+        ("elastic-search,e", po::value<std::string>(&es_conf)->required(),
+         "elastic search location http://localhost:9200");
 
     po::variables_map vm;
     po::store(po::parse_command_line(argc, argv, desc), vm);
@@ -360,7 +76,6 @@ int main(int argc, char** argv) {
     start = pt::microsec_clock::local_time();
     po::notify(vm);
 
-    navitia::hugin::Configuration conf;
     navitia::hugin::OSMCache cache;
     navitia::hugin::ReadRelationsVisitor relations_visitor(cache);
     CanalTP::read_osm_pbf(input, relations_visitor);
@@ -369,11 +84,16 @@ int main(int argc, char** argv) {
     navitia::hugin::ReadNodesVisitor node_visitor(cache);
     CanalTP::read_osm_pbf(input, node_visitor);
     cache.build_relations_geometries();
-    cache.build_postal_codes();
 
-    navitia::hugin::MimirPersistor persistor(cache, conf);
+    navitia::hugin::MimirPersistor persistor(cache, es_conf, "mimir");
 
-    persistor.persist();
+    // we first create the index we'll work on
+    persistor.create_index();
+
+    persistor.persist_admins();
+
+
+    persistor.finish();
 
     return 0;
 }
